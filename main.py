@@ -15,6 +15,9 @@ from aiogram.types import (Update, Message, CallbackQuery, InlineKeyboardMarkup,
 from docx import Document
 from pptx import Presentation
 from pptx.util import Pt
+import os
+
+PORT = int(os.environ.get("PORT", 5000))
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("bot")
