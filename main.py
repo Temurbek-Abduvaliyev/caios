@@ -2,6 +2,7 @@ import os, io, re, json, html, time, asyncio, secrets, logging
 from contextlib import asynccontextmanager
 
 import asyncpg, httpx
+import uvicorn
 from fastapi import FastAPI, Request, HTTPException
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.client.default import DefaultBotProperties
@@ -15,7 +16,6 @@ from aiogram.types import (Update, Message, CallbackQuery, InlineKeyboardMarkup,
 from docx import Document
 from pptx import Presentation
 from pptx.util import Pt
-import os
 
 PORT = int(os.environ.get("PORT", 5000))
 
@@ -60,6 +60,7 @@ LABELS = {**{k: v[0] for k, v in DOCS.items()}, "slayd": "Slayd"}
 class KeyPool:
     def __init__(self, keys):
         self.keys, self.i, self.cool = keys, 0, {k: 0.0 for k in keys}
+
     def pick(self):
         now = time.time()
         for _ in range(len(self.keys)):
@@ -68,6 +69,7 @@ class KeyPool:
             if self.cool[k] <= now:
                 return k
         return None
+
     def rest(self, k, sec):
         self.cool[k] = time.time() + sec
 
@@ -111,11 +113,16 @@ def make_docx(text, title):
         s = line.strip().replace("**", "").replace("`", "")
         if not s:
             continue
-        if s.startswith("### "): d.add_heading(s[4:], 3)
-        elif s.startswith("## "): d.add_heading(s[3:], 2)
-        elif s.startswith("# "): d.add_heading(s[2:], 1)
-        elif s[:2] in ("- ", "* "): d.add_paragraph(s[2:], style="List Bullet")
-        else: d.add_paragraph(s)
+        if s.startswith("### "):
+            d.add_heading(s[4:], 3)
+        elif s.startswith("## "):
+            d.add_heading(s[3:], 2)
+        elif s.startswith("# "):
+            d.add_heading(s[2:], 1)
+        elif s[:2] in ("- ", "* "):
+            d.add_paragraph(s[2:], style="List Bullet")
+        else:
+            d.add_paragraph(s)
     buf = io.BytesIO()
     d.save(buf)
     return buf.getvalue()
@@ -357,6 +364,8 @@ async def lifespan(app):
     if BASE_URL:
         await bot.set_webhook(f"{BASE_URL}/webhook", secret_token=SECRET, drop_pending_updates=True)
     yield
+    for t in tasks:
+        t.cancel()
     await db.close()
     await bot.session.close()
 
@@ -372,3 +381,6 @@ async def webhook(req: Request):
         raise HTTPException(403)
     await dp.feed_webhook_update(bot, Update.model_validate(await req.json(), context={"bot": bot}))
     return {"ok": True}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
